@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <omp.h>
+#include <time.h>
 
 #define DEFAULT_POP_SIZE 300 //bigger population is more costly
 #define DEFAULT_NUM_PARTICLES 30 //more PARTICLES is more costly
@@ -78,12 +80,13 @@ double calcFitness(box_pattern box, int num_particles){
 /* Creates initial random population */
 void initPopulation(box_pattern * box, int population_size,int xmax,int ymax,int num_particles){
     int i,p;
-    for (p=0;p<population_size;p++) {
+    #pragma omp parallel for
+    for (p=0; p<population_size; p++) {
         for (i=0; i<num_particles; i++){
-            box[p].person[i].x_pos=(rand()%(xmax + 1));
-            box[p].person[i].y_pos=(rand()%(ymax + 1));
+            box[p].person[i].x_pos = (rand() % (xmax + 1));
+            box[p].person[i].y_pos = (rand() % (ymax + 1));
         }
-        box[p].fitness=calcFitness(box[p],num_particles);
+        box[p].fitness = calcFitness(box[p], num_particles);
     }
 }
 
@@ -103,7 +106,7 @@ box_pattern crossover(box_pattern child, box_pattern parentOne, box_pattern pare
         child.person[i].x_pos=parentTwo.person[i].x_pos;
         child.person[i].y_pos=parentTwo.person[i].y_pos;
     }
-    child.fitness=calcFitness(child,num_particles); //calculate fitness
+    child.fitness=calcFitness(child, num_particles); //calculate fitness
     return child;
 }
 
@@ -123,43 +126,42 @@ void copybox(box_pattern *a, box_pattern *b, int num_particles){
 int breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles){
         int highest;
         box_pattern max_parent; //keep track of highest from previous generation
-        max_parent.person=malloc(num_particles*sizeof(position));
-        copybox(&max_parent,&box[0],num_particles); //set max to first one
+        max_parent.person=malloc(num_particles * sizeof(position));
+        copybox(&max_parent, &box[0], num_particles); //set max to first one
         int i;
         box_pattern *new_generation = (box_pattern*) malloc(sizeof(box_pattern)*(population_size));
         for(i=0;i<population_size;i++)
             new_generation[i].person=malloc(num_particles*sizeof(position));
 
         for (i=0; i<population_size; i+=2){ //two children
+		// Determine breeding pair, with tournament of 2 (joust)
+		int one = rand()%(population_size), two=rand()%(population_size);
+		int parentOne=two;
+		if (box[one].fitness > box[two].fitness) parentOne=one; //joust
 
-                // Determine breeding pair, with tournament of 2 (joust)
-                int one = rand()%(population_size), two=rand()%(population_size);
-                int parentOne=two;
-                if (box[one].fitness > box[two].fitness) parentOne=one; //joust
+		one = rand()%(population_size);
+		two=rand()%(population_size);
+		int parentTwo=two;
+		if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
 
-                one = rand()%(population_size);
-                two=rand()%(population_size);
-                int parentTwo=two;
-                if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
+		int splitPoint = rand() % num_particles; //split chromosome at point
+		new_generation[i]= crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint, num_particles); //first child
 
-                int splitPoint = rand() % num_particles; //split chromosome at point
-                new_generation[i]= crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint,num_particles); //first child
+		new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
 
-                new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint,num_particles); //second child
-
-                // Mutation first child
-                double mutation = rand()/(double)RAND_MAX;
-                if (mutation <= MUTATION_RATE ){
-                    int mutated = rand() % num_particles;
-                    new_generation[i].person[mutated].x_pos=(rand()%(x_max + 1));
-                    new_generation[i].person[mutated].y_pos=(rand()%(y_max + 1));
-                }
-                mutation = rand()/(double)RAND_MAX; //mutation second child
-                if (mutation <= MUTATION_RATE ){
-                    int mutated = rand() % num_particles;
-                    new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
-                    new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
-                }
+		// Mutation first child
+		double mutation = rand()/(double)RAND_MAX;
+		if (mutation <= MUTATION_RATE ){
+		    int mutated = rand() % num_particles;
+		    new_generation[i].person[mutated].x_pos=(rand()%(x_max + 1));
+		    new_generation[i].person[mutated].y_pos=(rand()%(y_max + 1));
+		}
+		mutation = rand()/(double)RAND_MAX; //mutation second child
+		if (mutation <= MUTATION_RATE ){
+		    int mutated = rand() % num_particles;
+		    new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
+		    new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
+		}
         }
 
         //find maximum parent fitness to keep and minimum new generation to throw away
@@ -206,6 +208,14 @@ int breeding(box_pattern *box, int population_size, int x_max, int y_max, int nu
         return highest;
 }
 
+void testInitPop(box_pattern * box, int population_size,int xmax,int ymax,int num_particles) {
+	int i;
+	for(i; i < 1000; i++) {
+		initPopulation(box, population_size, xmax, ymax, num_particles);
+	}
+
+}
+
 
 int main(int argc, char *argv[]){
         int population_size = DEFAULT_POP_SIZE;
@@ -214,7 +224,7 @@ int main(int argc, char *argv[]){
         int num_particles = DEFAULT_NUM_PARTICLES;
         int iter = ITERATIONS;
         int k,i;
-	
+
         if (argc >= 2) {
             population_size = atoi(argv[1]); //size population first command line argument
             if (argc >= 4) {
@@ -232,7 +242,7 @@ int main(int argc, char *argv[]){
         FILE *f = fopen("solution.txt", "w");
         printf("Writing dimensions to file\n");
         fprintf(f, "%d,%d\n", x_max, y_max); //write box dimensions as first line of file
-	
+
         box_pattern *population;
         population = (box_pattern *) malloc(sizeof(box_pattern) * population_size); //allocate memory
         for(i=0; i<population_size; i++)
@@ -241,7 +251,12 @@ int main(int argc, char *argv[]){
         for (k=0; k<iter; k++) { //k is number of times whole simulation is run
               // populate with initial population
                 printf("initializing population\n");
+		clock_t start = clock();
+		testInitPop(population, population_size, x_max, y_max, num_particles);
+		clock_t end = clock();
+		double elapsed_time = (end - start) / (double) CLOCKS_PER_SEC ;
                 initPopulation(population, population_size, x_max, y_max, num_particles);
+		printf("Elapsed time: %d", elapsed_time);
                 printf("=========%d\n", k);
 
                 double max_fitness = 0;
