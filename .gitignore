@@ -1,3 +1,8 @@
+# Additional
+*.out
+solution.txt
+solution.pdf
+
 # Prerequisites
 *.d
 
