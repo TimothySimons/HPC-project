@@ -56,6 +56,8 @@ void printboxFile(box_pattern box,FILE *f,int num_particles ){
 
 
 /* FITNESS FUNCTION  - this is key*/
+// NOTE: this is the most cost intensive operation of the program (by far) 
+// NOTE: check out gprof - https://www.maketecheasier.com/profile-c-program-linux-using-gprof/
 double calcFitness(box_pattern box, int num_particles){
     double fitness=0.0;
     int i,j;
@@ -130,6 +132,8 @@ int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num
     for(i=0;i<population_size;i++)
         new_generation[i].person=malloc(num_particles*sizeof(position));
 
+    // TODO: add #pragma omp parrallel for directive to this for loop.
+    // NOTE: reason being it contains calcFitness (bottleneck)
     for (i=0; i<population_size; i+=2){ //two children
         // Determine breeding pair, with tournament of 2 (joust)
         int one = rand() % (population_size);
@@ -168,16 +172,20 @@ int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num
     double max_fitness= new_generation[0].fitness;
     highest=0;
 
+    // TODO: add #pragma omp parrallel for directive to this for loop.
+    // TODO: ensure comparison against min and max are in a #pragma omp critical region.
+    // NOTE: use named critical regions (name for min; diff. name for max)
+    // NOTE: reason for parallelise - contains calcFitness (bottleneck)
     for (i=1; i<population_size; i++){
-        if (box[i].fitness>max_parent.fitness) {
+        if (box[i].fitness > max_parent.fitness) {
             copybox(&max_parent,&box[i],num_particles); //replace lowest fitness with highest parent
         }
-        new_generation[i].fitness=calcFitness(new_generation[i],num_particles);
-        if (new_generation[i].fitness<min_fitness) {
+        new_generation[i].fitness = calcFitness(new_generation[i],num_particles);
+        if (new_generation[i].fitness < min_fitness) {
             min_fitness=new_generation[i].fitness;
             min_box=i;
         }
-        if (new_generation[i].fitness>max_fitness) {
+        if (new_generation[i].fitness > max_fitness) {
             max_fitness=new_generation[i].fitness;
             highest=i;
         }
