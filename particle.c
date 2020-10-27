@@ -56,7 +56,7 @@ void printboxFile(box_pattern box,FILE *f,int num_particles ){
 
 
 /* FITNESS FUNCTION  - this is key*/
-double calcFitness(box_pattern box,int num_particles){
+double calcFitness(box_pattern box, int num_particles){
     double fitness=0.0;
     int i,j;
     double x,y,r,tmp;
@@ -78,7 +78,6 @@ double calcFitness(box_pattern box,int num_particles){
 /* Creates initial random population */
 void initPopulation(box_pattern *box, int population_size, int xmax, int ymax, int num_particles){
     int i,p;
-    #pragma omp parallel for
     for (p=0; p<population_size; p++) {
         for (i=0; i<num_particles; i++){
             box[p].person[i].x_pos = (rand() % (xmax + 1));
@@ -97,14 +96,14 @@ box_pattern crossover(box_pattern child, box_pattern parentOne, box_pattern pare
         child.person[i].y_pos=parentOne.person[i].y_pos;
     }
     i--;
-    if((rand()%(2) ==1) && (i<num_particles) &&(i>=0)) //50% of time split in middle of person, more mixing
+    if((rand()%(2) == 1) && (i<num_particles) && (i>=0)) //50% of time split in middle of person, more mixing
         child.person[i].y_pos=parentTwo.person[i].y_pos;
 
     for (i=splitPoint; i<num_particles; i++){ //copy over parentTwo from splitPoint to end
         child.person[i].x_pos=parentTwo.person[i].x_pos;
         child.person[i].y_pos=parentTwo.person[i].y_pos;
     }
-    child.fitness=calcFitness(child,num_particles); //calculate fitness
+    child.fitness = calcFitness(child, num_particles); //calculate fitness
     return child;
 }
 
@@ -121,32 +120,31 @@ void copybox(box_pattern *a, box_pattern *b,int num_particles){
 
 
 /* Main GA function - does selection, breeding, crossover and mutation */
-int breeding(box_pattern * box, int population_size, int x_max, int y_max,int num_particles){
+int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num_particles){
     int highest;
     box_pattern max_parent; //keep track of highest from previous generation
-    max_parent.person=malloc(num_particles*sizeof(position));
-    copybox(&max_parent,&box[0],num_particles); //set max to first one
+    max_parent.person = malloc(num_particles * sizeof(position));
+    copybox(&max_parent, &box[0], num_particles); //set max to first one
     int i;
-    box_pattern * new_generation = (box_pattern*) malloc(sizeof(box_pattern)*(population_size));
+    box_pattern *new_generation = (box_pattern*) malloc(sizeof(box_pattern) * (population_size));
     for(i=0;i<population_size;i++)
         new_generation[i].person=malloc(num_particles*sizeof(position));
 
     for (i=0; i<population_size; i+=2){ //two children
-
         // Determine breeding pair, with tournament of 2 (joust)
-        int one = rand()%(population_size), two=rand()%(population_size);
-        int parentOne=two;
-        if (box[one].fitness > box[two].fitness) parentOne=one; //joust
+        int one = rand() % (population_size);
+        int two = rand() % (population_size);
+        int parentOne = two;
+        if (box[one].fitness > box[two].fitness) parentOne = one; //joust
 
-        one = rand()%(population_size);
-        two=rand()%(population_size);
-        int parentTwo=two;
+        one = rand() % (population_size);
+        two = rand() % (population_size);
+        int parentTwo = two;
         if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
 
         int splitPoint = rand() % num_particles; //split chromosome at point
-        new_generation[i]= crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint,num_particles); //first child
-
-        new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint,num_particles); //second child
+        new_generation[i] = crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint, num_particles); //first child
+        new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
 
         // Mutation first child
         double mutation = rand()/(double)RAND_MAX;
@@ -169,6 +167,7 @@ int breeding(box_pattern * box, int population_size, int x_max, int y_max,int nu
     int min_box=0;
     double max_fitness= new_generation[0].fitness;
     highest=0;
+
     for (i=1; i<population_size; i++){
         if (box[i].fitness>max_parent.fitness) {
             copybox(&max_parent,&box[i],num_particles); //replace lowest fitness with highest parent
@@ -263,7 +262,8 @@ int main(int argc, char *argv[] ) {
     }
     fclose(f);
 
-    for(i=0;i<population_size;i++) free(population[i].person); //release memory
+    for(i=0;i<population_size;i++) 
+        free(population[i].person); //release memory
     free(population); //release memory
 
     printf("Average generations: %f\n", (double)gen_count/(double)k);

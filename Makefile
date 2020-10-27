@@ -1,5 +1,6 @@
 particle: particle.c
 	 gcc -I -L particle.c -o particle
+
 particle_omp: particle.c
 	gcc -I -L particle.c -fopenmp -o particle_omp
 
