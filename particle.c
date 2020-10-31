@@ -16,6 +16,7 @@
 static const int X_DEFAULT=20; //width of box
 static const int Y_DEFAULT=20; //length of box
 static const double MUTATION_RATE=0.10; //how often random mutations occur
+static const double MAX_STAGNATION=100; // maximum number of generations
 static const double MAX_GEN =1000; // maximum number of generations
 static const double ITERATIONS=10; //number of times the whole process is run
 static const double TOLERANCE=50; //not used... yet
@@ -33,6 +34,12 @@ typedef struct{
     position *person;
     double fitness;
 } box_pattern;
+
+
+typedef struct {
+    int population_index;
+    double fitness;
+} population_best;
 
 
 //display the box pattern
@@ -122,7 +129,7 @@ void copybox(box_pattern *a, box_pattern *b,int num_particles){
 
 
 /* Main GA function - does selection, breeding, crossover and mutation */
-int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num_particles){
+population_best breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles){
     int highest;
     box_pattern max_parent; //keep track of highest from previous generation
     max_parent.person = malloc(num_particles * sizeof(position));
@@ -178,9 +185,9 @@ int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num
     // NOTE: reason for parallelise - contains calcFitness (bottleneck)
     for (i=1; i<population_size; i++){
         if (box[i].fitness > max_parent.fitness) {
-            copybox(&max_parent,&box[i],num_particles); //replace lowest fitness with highest parent
+            copybox(&max_parent, &box[i], num_particles); //replace lowest fitness with highest parent
         }
-        new_generation[i].fitness = calcFitness(new_generation[i],num_particles);
+        new_generation[i].fitness = calcFitness(new_generation[i], num_particles);
         if (new_generation[i].fitness < min_fitness) {
             min_fitness=new_generation[i].fitness;
             min_box=i;
@@ -202,16 +209,21 @@ int breeding(box_pattern *box, int population_size, int x_max, int y_max,int num
         }
         // printbox(box[i]);
     }
-    if (max_parent.fitness>max_fitness) { //previous generation has the best
-        max_fitness=max_parent.fitness;
-        highest=min_box;
+    if (max_parent.fitness > max_fitness) { //previous generation has the best
+        max_fitness = max_parent.fitness;
+        highest = min_box;
         //printf("max fitness should be: %f",max_parent.fitness);
     }
+
+    population_best best_box;
+    best_box.population_index = highest;
+    best_box.fitness = max_fitness;
+
     for(i=0;i<population_size;i++)
         free(new_generation[i].person); //release memory
     free(new_generation); //release memory
     free(max_parent.person);
-    return highest;
+    return best_box;
 }
 
 
@@ -250,23 +262,31 @@ int main(int argc, char *argv[] ) {
         printf("=========%d\n", k);
 
         double max_fitness=0;
-        // main loop
         int stop=0;
         int gen=0,highest=0;
-        while (gen<MAX_GEN) {
-            highest=breeding(population,population_size,x_max,y_max,num_particles);
+        while (stop < MAX_STAGNATION) {
+            population_best best_box = breeding(population, population_size, x_max, y_max, num_particles);
+            highest = best_box.population_index;
+            double fitness = best_box.fitness;
+            if (fitness <= max_fitness) {
+                ++stop;
+            } else {
+                max_fitness = fitness;
+                stop=0;
+            }
             gen+=1;
         }
+
         printf("# generations= %d \n", gen);
         printf("Best solution:\n");
-        printbox(population[highest],num_particles);
+        printbox(population[highest], num_particles);
         if (f == NULL) {
             printf("Error opening file!\n");
             exit(1);
         }
-        printboxFile(population[highest],f,num_particles);
+        printboxFile(population[highest], f, num_particles);
         printf("---------");
-        gen_count+=gen;
+        gen_count += gen;
     }
     fclose(f);
 
