@@ -3,11 +3,11 @@
  * M. Kuttel October 2020
  */
 
+#include <math.h>
+#include <omp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <math.h>
-#include <omp.h>
 
 #define DEFAULT_POP_SIZE 300 //bigger population is more costly
 #define DEFAULT_NUM_PARTICLES 30 //more PARTICLES is more costly
@@ -17,7 +17,7 @@ static const int X_DEFAULT=20; //width of box
 static const int Y_DEFAULT=20; //length of box
 static const double MUTATION_RATE=0.10; //how often random mutations occur
 static const double MAX_STAGNATION=100; // maximum number of generations
-static const double MAX_GEN =1000; // maximum number of generations
+static const double MAX_GEN=1000; // maximum number of generations
 static const double ITERATIONS=10; //number of times the whole process is run
 static const double TOLERANCE=50; //not used... yet
 
@@ -46,7 +46,7 @@ typedef struct {
 void printbox(box_pattern box,int num_particles){
     int i;
     for (i=0; i<num_particles-1; i++){
-        printf("%d,%d\t",box.person[i].x_pos,box.person[i].y_pos);
+        printf("%d,%d\t", box.person[i].x_pos, box.person[i].y_pos);
     }
     printf("%d,%d\t:fitness %f\n",box.person[i].x_pos,box.person[i].y_pos,box.fitness);
 }
@@ -69,15 +69,15 @@ double calcFitness(box_pattern box, int num_particles){
     double fitness=0.0;
     int i,j;
     double x,y,r,tmp;
-    for (i =0;i<num_particles-1;i++) {
-        for (j =i+1;j<num_particles;j++) { //cycle through all pairs to calc distances
+    for (i =0; i<num_particles-1; i++) {
+        for (j=i+1; j<num_particles; j++) { //cycle through all pairs to calc distances
             x = (double)box.person[i].x_pos - (double)box.person[j].x_pos;
             y = (double) box.person[i].y_pos - (double)box.person[j].y_pos;
-            r=sqrt((x*x)+(y*y));
-            tmp=2.0/r;
+            r = sqrt((x*x)+(y*y));
+            tmp = 2.0/r;
             //fitness-= 1.0/r; // electric repulsion
             //fitness-= pow(tmp,6); //purely repulsive function
-            fitness+= (pow(tmp,12)-pow(tmp,6)); //Lennard-Jones function
+            fitness+= (pow(tmp,12) - pow(tmp,6)); //Lennard-Jones function
         }
     }
     return fitness;
@@ -130,18 +130,18 @@ void copybox(box_pattern *a, box_pattern *b,int num_particles){
 
 /* Main GA function - does selection, breeding, crossover and mutation */
 population_best breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles){
-    int highest;
     box_pattern max_parent; //keep track of highest from previous generation
     max_parent.person = malloc(num_particles * sizeof(position));
     copybox(&max_parent, &box[0], num_particles); //set max to first one
     int i;
     box_pattern *new_generation = (box_pattern*) malloc(sizeof(box_pattern) * (population_size));
-    for(i=0;i<population_size;i++)
+    for(i=0;i<population_size;i++) {
         new_generation[i].person=malloc(num_particles*sizeof(position));
+    }
 
     // TODO: add #pragma omp parrallel for directive to this for loop.
     // NOTE: reason being it contains calcFitness (bottleneck)
-    for (i=0; i<population_size; i+=2){ //two children
+    for (i=0; i<population_size; i+=2) { //two children
         // Determine breeding pair, with tournament of 2 (joust)
         int one = rand() % (population_size);
         int two = rand() % (population_size);
@@ -172,12 +172,20 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
         }
     }
 
-    //find maximum parent fitness to keep and minimum new generation to throw away
-    new_generation[0].fitness=calcFitness(new_generation[0],num_particles);
-    double min_fitness=new_generation[0].fitness;
-    int min_box=0;
-    double max_fitness= new_generation[0].fitness;
-    highest=0;
+    // find maximum parent fitness to keep and minimum new generation to throw away.
+    // TODO: set max_fitness to 0 if calcFitness evaluates to -nan (see what Michelle says on Teams).
+    // NOTE: (-nan > x) always evaluates to false, meaning max_fitness will never be updated if starts as -nan.
+    new_generation[0].fitness = calcFitness(new_generation[0], num_particles);
+    double min_fitness, max_fitness;
+    if isnan(new_generation[0].fitness) {
+        min_fitness = 0;
+        max_fitness = 0;
+    } else {
+        min_fitness = new_generation[0].fitness;
+        max_fitness = new_generation[0].fitness;
+    }
+    int min_box = 0;
+    int highest = 0;
 
     // TODO: add #pragma omp parrallel for directive to this for loop.
     // TODO: ensure comparison against min and max are in a #pragma omp critical region.
@@ -198,21 +206,19 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
         }
     }
 
-    // printf("max fitness should be: %f\n",max_parent.fitness);
     //copies
     for (i=0; i<population_size; i++){
         //printbox(new_generation[i]);
-        if (i==min_box) {
-            copybox(&box[i],&max_parent,num_particles);
+        if (i == min_box) {
+            copybox(&box[i], &max_parent, num_particles);
         } else {
-            copybox(&box[i],&new_generation[i],num_particles);
+            copybox(&box[i], &new_generation[i], num_particles);
         }
         // printbox(box[i]);
     }
     if (max_parent.fitness > max_fitness) { //previous generation has the best
         max_fitness = max_parent.fitness;
         highest = min_box;
-        //printf("max fitness should be: %f",max_parent.fitness);
     }
 
     population_best best_box;
@@ -245,15 +251,15 @@ int main(int argc, char *argv[] ) {
     }
 
     printf("Starting optimization with particles = %d, population=%d, width=%d,length=%d for %d iterations\n",num_particles,population_size,x_max,y_max,iter);
-    int gen_count=0;
+    int gen_count = 0;
     FILE *f = fopen("solution.txt", "w");
     printf("Writing dimensions to file\n");
-    fprintf(f,"%d,%d\n",x_max,y_max); //write box dimensions as first line of file
+    fprintf(f, "%d,%d\n", x_max, y_max); //write box dimensions as first line of file
 
     box_pattern * population;
-    population = (box_pattern*) malloc(sizeof(box_pattern)*population_size); //allocate memory
+    population = (box_pattern*) malloc(sizeof(box_pattern) * population_size); //allocate memory
     for(i=0;i<population_size;i++)
-        population[i].person=malloc(num_particles*sizeof(position));//allocate memory
+        population[i].person = malloc(num_particles * sizeof(position)); //allocate memory
 
     for (k=0; k<iter; k++) { //k is number of times whole simulation is run
         // populate with initial population
@@ -261,20 +267,25 @@ int main(int argc, char *argv[] ) {
         initPopulation(population,population_size,x_max,y_max,num_particles);
         printf("=========%d\n", k);
 
-        double max_fitness=0;
-        int stop=0;
-        int gen=0,highest=0;
-        while (stop < MAX_STAGNATION) {
+        double max_fitness = 0;
+        int stop = 0;
+        int gen = 0, highest = 0;
+        while (stop < MAX_STAGNATION && gen < MAX_GEN) {
             population_best best_box = breeding(population, population_size, x_max, y_max, num_particles);
             highest = best_box.population_index;
             double fitness = best_box.fitness;
+
+            // if(isnan(fitness)) printf("is nan bruh\n");
+                
+            // if (gen % 50 == 0) printf("Fitness: %f\n", fitness);
+
             if (fitness <= max_fitness) {
                 ++stop;
             } else {
                 max_fitness = fitness;
-                stop=0;
+                stop = 0;
             }
-            gen+=1;
+            gen += 1;
         }
 
         printf("# generations= %d \n", gen);
