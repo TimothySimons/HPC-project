@@ -173,8 +173,8 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     }
 
     // find maximum parent fitness to keep and minimum new generation to throw away.
-    // TODO: set max_fitness to 0 if calcFitness evaluates to -nan (see what Michelle says on Teams).
-    // NOTE: (-nan > x) always evaluates to false, meaning max_fitness will never be updated if starts as -nan.
+    // NOTE: if new_generation[0].fitness isnan then the fittest individual is never updated.
+    // NOTE: this is because (x > -nan) always evaluates to false.
     new_generation[0].fitness = calcFitness(new_generation[0], num_particles);
     double min_fitness, max_fitness;
     if isnan(new_generation[0].fitness) {
@@ -274,11 +274,6 @@ int main(int argc, char *argv[] ) {
             population_best best_box = breeding(population, population_size, x_max, y_max, num_particles);
             highest = best_box.population_index;
             double fitness = best_box.fitness;
-
-            // if(isnan(fitness)) printf("is nan bruh\n");
-                
-            // if (gen % 50 == 0) printf("Fitness: %f\n", fitness);
-
             if (fitness <= max_fitness) {
                 ++stop;
             } else {
