@@ -129,8 +129,8 @@ void copybox(box_pattern *a, box_pattern *b,int num_particles){
 }
 
 
-/* Main GA function - does selection, breeding, crossover and mutation */
-population_best breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles){
+/* main GA function - does selection, breeding, crossover and mutation */
+population_best breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles) {
     
     box_pattern max_parent; //keep track of highest from previous generation
     max_parent.person = malloc(num_particles * sizeof(position));
@@ -139,29 +139,28 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     int i;
 
     // allocate memory  
-    printf("breeding method - BEFORE mem alloc\n");
-    fflush(stdout);
     box_pattern *new_generation = (box_pattern*) malloc(sizeof(box_pattern) * (population_size));
-    for(i=0;i<population_size;i++) {
-        new_generation[i].person=malloc(num_particles*sizeof(position));
+    for(i=0; i<population_size; i++) {
+        new_generation[i].person = malloc(num_particles * sizeof(position));
     }
-    printf("breeding method - AFTER mem alloc\n");
 
     for (i=0; i<population_size; i+=2) { //two children
         // determine breeding pair, with tournament of 2 (joust)
         int one = rand() % (population_size);
         int two = rand() % (population_size);
         int parentOne = two;
-        if (box[one].fitness > box[two].fitness) parentOne = one; //joust
+        if (box[one].fitness > box[two].fitness) parentOne = one;
 
         one = rand() % (population_size);
         two = rand() % (population_size);
         int parentTwo = two;
-        if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
-
-        int splitPoint = rand() % num_particles; //split chromosome at point
+        if (box[one].fitness > box[two].fitness) parentTwo = one;
+        
+        int splitPoint = rand() % num_particles; 
         new_generation[i] = crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint, num_particles); //first child
-        new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
+        if (i+1 < population_size) {
+            new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
+        }
 
         // mutation first child
         double mutation = rand()/(double)RAND_MAX;
@@ -172,11 +171,13 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
         }
 
         // mutation second child
-        mutation = rand()/(double)RAND_MAX; //mutation second child
-        if (mutation <= MUTATION_RATE ){
-            int mutated = rand() % num_particles;
-            new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
-            new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
+        if (i+1 < population_size) {
+            mutation = rand()/(double)RAND_MAX; //mutation second child
+            if (mutation <= MUTATION_RATE ){
+                int mutated = rand() % num_particles;
+                new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
+                new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
+            }
         }
     }
 
@@ -212,16 +213,14 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
 
     //copies
     for (i=0; i<population_size; i++){
-        //printbox(new_generation[i]);
         if (i == min_box) {
             copybox(&box[i], &max_parent, num_particles);
         } else {
             copybox(&box[i], &new_generation[i], num_particles);
         }
-        // printbox(box[i]);
     }
 
-    if (max_parent.fitness > max_fitness) { //previous generation has the best
+    if (max_parent.fitness > max_fitness) {
         max_fitness = max_parent.fitness;
         highest = min_box;
     }
@@ -238,6 +237,7 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
 
     return best_box;
 }
+
 
 int main(int argc, char *argv[]) {
     int population_size = DEFAULT_POP_SIZE;
@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
     
     // init
     int world_rank, world_size;
-    MPI_Init(NULL, NULL);
+    MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
@@ -287,46 +287,48 @@ int main(int argc, char *argv[]) {
     }
 
     // run simulation k times
+    srand(world_rank);
     double max_fitness = 0;
     int gen = 0, highest = 0, stop = 0;
     for (k=0; k<iter; k++) {
-        printf("Rank %d initializing sub-population=%d iter=%d\n", world_rank, sub_pop_size, k);
+        printf("Rank %d: initializing sub-population=%d iter=%d\n", world_rank, sub_pop_size, k);
         initPopulation(sub_population, sub_pop_size, x_max, y_max, num_particles);
 
         double max_fitness = 0;
         int gen = 0, highest = 0, stop = 0;
         while (stop < MAX_STAGNATION && gen < MAX_GEN) {
             population_best best_box = breeding(sub_population, sub_pop_size, x_max, y_max, num_particles);
+            highest = best_box.population_index;
+            double fitness = best_box.fitness;
+            if (fitness <= max_fitness) {
+                ++stop;
+            } else {
+                max_fitness = fitness;
+                stop = 0;
+            }
             gen += 1;
         }
+
+        printf("Rank %d fitness: %f\n", world_rank, max_fitness);
+        if (world_rank == 0) {
+            if (f == NULL) {
+                printf("Error opening file!\n");
+                exit(1);
+            }
+            printboxFile(sub_population[highest], f, num_particles);
+        }
+        
+        gen_count += gen;
     }
-//
-//        double max_fitness = 0;
-//        int gen = 0, highest = 0, stop = 0;
-//        while (stop < MAX_STAGNATION && gen < MAX_GEN) {
-//            population_best best_box = breeding(sub_population, sub_pop_size, x_max, y_max, num_particles);
-//            highest = best_box.population_index;
-//            double fitness = best_box.fitness;
-//            if (fitness <= max_fitness) {
-//                ++stop;
-//            } else {
-//                max_fitness = fitness;
-//                stop = 0;
-//            }
-//            gen += 1;
-//        }
-    
 
-
+    if (world_rank == 0) {
+        fclose(f);
+    }
 
     // release memory
     for(i=0;i<sub_pop_size;i++) 
         free(sub_population[i].person); 
     free(sub_population);
-
-    if (world_rank == 0) {
-        fclose(f);
-    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
