@@ -87,12 +87,15 @@ double calcFitness(box_pattern box, int num_particles){
 /* Creates initial random population */
 void initPopulation(box_pattern *box, int population_size, int xmax, int ymax, int num_particles){
     int i,p;
-    for (p=0; p<population_size; p++) {
-        for (i=0; i<num_particles; i++){
-            box[p].person[i].x_pos = (rand() % (xmax + 1));
-            box[p].person[i].y_pos = (rand() % (ymax + 1));
+    #pragma omp parallel private(i,p)
+    {
+        for (p=0; p<population_size; p++) {
+            for (i=0; i<num_particles; i++){
+                box[p].person[i].x_pos = (rand() % (xmax + 1));
+                box[p].person[i].y_pos = (rand() % (ymax + 1));
+            }
+            box[p].fitness = calcFitness(box[p], num_particles);
         }
-        box[p].fitness = calcFitness(box[p], num_particles);
     }
 }
 
@@ -135,49 +138,59 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     copybox(&max_parent, &box[0], num_particles); //set max to first one
     int i;
     box_pattern *new_generation = (box_pattern*) malloc(sizeof(box_pattern) * (population_size));
+    // no parallel here since malloc isn't an expensive function?
+
     for(i=0;i<population_size;i++) {
         new_generation[i].person=malloc(num_particles*sizeof(position));
     }
 
+    int one,two,parentOne,parentTwo,splitPoint,mutated;
+    double mutation;
+
     // TODO: add #pragma omp parrallel for directive to this for loop.
     // NOTE: reason being it contains calcFitness (bottleneck)
-    for (i=0; i<population_size; i+=2) { //two children
-        // Determine breeding pair, with tournament of 2 (joust)
-        int one = rand() % (population_size);
-        int two = rand() % (population_size);
-        int parentOne = two;
-        if (box[one].fitness > box[two].fitness) parentOne = one; //joust
+    #pragma omp parallel private(i,one, two, parentOne,parentTwo,splitPoint,mutation,mutated) shared(box,new_generation,num_particles)
+//  this parallel has too much overhead and slows down the program
+    {
+        for (i=0; i<population_size; i+=2) { //two children
+            // printf("(#threads=%d) iteration: %i\n",omp_get_thread_num(), i);
+            // Determine breeding pair, with tournament of 2 (joust)
+            one = rand() % (population_size);
+            two = rand() % (population_size);
+            parentOne = two;
+            if (box[one].fitness > box[two].fitness) parentOne = one; //joust
 
-        one = rand() % (population_size);
-        two = rand() % (population_size);
-        int parentTwo = two;
-        if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
+            one = rand() % (population_size);
+            two = rand() % (population_size);
+            parentTwo = two;
+            if (box[one].fitness > box[two].fitness) parentTwo=one; //joust
 
-        int splitPoint = rand() % num_particles; //split chromosome at point
-        new_generation[i] = crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint, num_particles); //first child
-        new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
+            splitPoint = rand() % num_particles; //split chromosome at point
+            new_generation[i] = crossover(new_generation[i], box[parentOne], box[parentTwo], splitPoint, num_particles); //first child
+            new_generation[i+1] = crossover(new_generation[i+1], box[parentTwo], box[parentOne], splitPoint, num_particles); //second child
 
-        // Mutation first child
-        double mutation = rand()/(double)RAND_MAX;
-        if (mutation <= MUTATION_RATE ){
-            int mutated = rand() % num_particles;
-            new_generation[i].person[mutated].x_pos=(rand()%(x_max + 1));
-            new_generation[i].person[mutated].y_pos=(rand()%(y_max + 1));
-        }
-        mutation = rand()/(double)RAND_MAX; //mutation second child
-        if (mutation <= MUTATION_RATE ){
-            int mutated = rand() % num_particles;
-            new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
-            new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
+            // Mutation first child
+            mutation = rand()/(double)RAND_MAX;
+            if (mutation <= MUTATION_RATE ){
+                mutated = rand() % num_particles;
+                new_generation[i].person[mutated].x_pos=(rand()%(x_max + 1));
+                new_generation[i].person[mutated].y_pos=(rand()%(y_max + 1));
+            }
+            mutation = rand()/(double)RAND_MAX; //mutation second child
+            if (mutation <= MUTATION_RATE ){
+                mutated = rand() % num_particles;
+                new_generation[i+1].person[mutated].x_pos=(rand()%(x_max + 1));
+                new_generation[i+1].person[mutated].y_pos=(rand()%(y_max + 1));
+            }
         }
     }
-
     // find maximum parent fitness to keep and minimum new generation to throw away.
     // NOTE: if new_generation[0].fitness isnan then the fittest individual is never updated.
     // NOTE: this is because (x > -nan) always evaluates to false.
+    // #pragma omp barrier // reason for barrier is that the access to new_generation below might cause a data race
     new_generation[0].fitness = calcFitness(new_generation[0], num_particles);
     double min_fitness, max_fitness;
-    if isnan(new_generation[0].fitness) {
+    if (isnan(new_generation[0].fitness)) {
         min_fitness = 0;
         max_fitness = 0;
     } else {
@@ -191,18 +204,22 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     // TODO: ensure comparison against min and max are in a #pragma omp critical region.
     // NOTE: use named critical regions (name for min; diff. name for max)
     // NOTE: reason for parallelise - contains calcFitness (bottleneck)
-    for (i=1; i<population_size; i++){
-        if (box[i].fitness > max_parent.fitness) {
-            copybox(&max_parent, &box[i], num_particles); //replace lowest fitness with highest parent
-        }
-        new_generation[i].fitness = calcFitness(new_generation[i], num_particles);
-        if (new_generation[i].fitness < min_fitness) {
-            min_fitness=new_generation[i].fitness;
-            min_box=i;
-        }
-        if (new_generation[i].fitness > max_fitness) {
-            max_fitness=new_generation[i].fitness;
-            highest=i;
+    #pragma omp parallel private(i) shared(box, max_parent,num_particles, new_generation,min_fitness,min_box,max_fitness,highest)
+    {
+        for (i=1; i<population_size; i++){
+
+            if (box[i].fitness > max_parent.fitness) {
+                copybox(&max_parent, &box[i], num_particles); //replace lowest fitness with highest parent
+            }
+            new_generation[i].fitness = calcFitness(new_generation[i], num_particles);
+            if (new_generation[i].fitness < min_fitness) {
+                min_fitness=new_generation[i].fitness;
+                min_box=i;
+            }
+            if (new_generation[i].fitness > max_fitness) {
+                max_fitness=new_generation[i].fitness;
+                highest=i;
+            }
         }
     }
 
@@ -225,8 +242,12 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     best_box.population_index = highest;
     best_box.fitness = max_fitness;
 
-    for(i=0;i<population_size;i++)
-        free(new_generation[i].person); //release memory
+    // #pragma omp parallel private(i) shared(new_generation)
+    // {
+        for(i=0;i<population_size;i++) {
+            free(new_generation[i].person); //release memory
+        }
+    // }
     free(new_generation); //release memory
     free(max_parent.person);
     return best_box;
@@ -261,6 +282,11 @@ int main(int argc, char *argv[] ) {
     for(i=0;i<population_size;i++)
         population[i].person = malloc(num_particles * sizeof(position)); //allocate memory
 
+    double start; 
+    double end; 
+    double averageTimeTaken;
+    start = omp_get_wtime(); 
+
     for (k=0; k<iter; k++) { //k is number of times whole simulation is run
         // populate with initial population
         printf("initializing population\n");
@@ -282,6 +308,10 @@ int main(int argc, char *argv[] ) {
             }
             gen += 1;
         }
+        end = omp_get_wtime(); 
+        double timeTaken =end - start;
+        printf("Work took %f seconds\n", timeTaken);
+        averageTimeTaken+=timeTaken;
 
         printf("# generations= %d \n", gen);
         printf("Best solution:\n");
@@ -293,6 +323,7 @@ int main(int argc, char *argv[] ) {
         printboxFile(population[highest], f, num_particles);
         printf("---------");
         gen_count += gen;
+        start = omp_get_wtime(); 
     }
     fclose(f);
 
@@ -301,5 +332,8 @@ int main(int argc, char *argv[] ) {
     free(population); //release memory
 
     printf("Average generations: %f\n", (double)gen_count/(double)k);
+
+    averageTimeTaken=averageTimeTaken/ iter;
+    printf("Average time taken: %f with %i particles" , averageTimeTaken, num_particles);
     return 0;
 }
