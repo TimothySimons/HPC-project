@@ -177,7 +177,7 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     // NOTE: this is because (x > -nan) always evaluates to false.
     new_generation[0].fitness = calcFitness(new_generation[0], num_particles);
     double min_fitness, max_fitness;
-    if isnan(new_generation[0].fitness) {
+    if (isnan(new_generation[0].fitness)) {
         min_fitness = 0;
         max_fitness = 0;
     } else {

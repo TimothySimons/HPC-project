@@ -1,0 +1,30 @@
+serial with 200 20 20 30 8 :
+
+
+zero parallel
+default parameters
+Average time taken: 22.156900 with 30 particles
+Average time taken: 22.110200 with 30 particles
+
+parallel init pop
+default parameters
+Average time taken: 20.350300 with 30 particles 
+300 pop 100 particles
+Average time taken: 87.927800 with 100 particles fitness -1.#IND00
+Average time taken: 97.404600 with 100 particles fitness -1.#IND00
+
+
+parallel init pop and parallel breeding children and mutation
+default parameters
+Average time taken: 28.467500 with 30 particles
+Average time taken: 32.922500 with 30 particles
+Average time taken: 27.675600 with 30 particles
+300 pop 100 particles
+97.549000 with 100 particles
+600 pop 100 particles
+
+
+parallel init pop and parallel for in //find maximum parent fitness to keep and minimum new generation to throw away
+default parameters
+Average time taken: 34.767300 with 30 particles
+Average time taken: 33.801800 with 30 particles
