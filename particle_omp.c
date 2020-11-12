@@ -87,10 +87,13 @@ double calcFitness(box_pattern box, int num_particles){
 /* Creates initial random population */
 void initPopulation(box_pattern *box, int population_size, int xmax, int ymax, int num_particles){
     int i,p;
-    #pragma omp parallel private(i,p)
+    #pragma omp parallel private(p,i)
     {
         for (p=0; p<population_size; p++) {
             for (i=0; i<num_particles; i++){
+                // if (omp_get_thread_num()==0) {
+                //     printf("threadNum=%d,i=%d,p=%d\n",omp_get_thread_num(),i,p);
+                // }
                 box[p].person[i].x_pos = (rand() % (xmax + 1));
                 box[p].person[i].y_pos = (rand() % (ymax + 1));
             }
@@ -150,7 +153,7 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     // TODO: add #pragma omp parrallel for directive to this for loop.
     // NOTE: reason being it contains calcFitness (bottleneck)
     #pragma omp parallel private(i,one, two, parentOne,parentTwo,splitPoint,mutation,mutated) shared(box,new_generation,num_particles)
-//  this parallel has too much overhead and slows down the program
+//  this parallel has too much overhead and slows down the program with small params
     {
         for (i=0; i<population_size; i+=2) { //two children
             // printf("(#threads=%d) iteration: %i\n",omp_get_thread_num(), i);
@@ -205,17 +208,20 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     // NOTE: use named critical regions (name for min; diff. name for max)
     // NOTE: reason for parallelise - contains calcFitness (bottleneck)
     #pragma omp parallel private(i) shared(box, max_parent,num_particles, new_generation,min_fitness,min_box,max_fitness,highest)
-    {
+    {   
+        // printf("%d\n", omp_get_thread_num());
         for (i=1; i<population_size; i++){
 
             if (box[i].fitness > max_parent.fitness) {
                 copybox(&max_parent, &box[i], num_particles); //replace lowest fitness with highest parent
             }
             new_generation[i].fitness = calcFitness(new_generation[i], num_particles);
+            #pragma omp critical
             if (new_generation[i].fitness < min_fitness) {
                 min_fitness=new_generation[i].fitness;
                 min_box=i;
             }
+            #pragma omp critical
             if (new_generation[i].fitness > max_fitness) {
                 max_fitness=new_generation[i].fitness;
                 highest=i;
@@ -224,14 +230,17 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     }
 
     //copies
-    for (i=0; i<population_size; i++){
-        //printbox(new_generation[i]);
-        if (i == min_box) {
-            copybox(&box[i], &max_parent, num_particles);
-        } else {
-            copybox(&box[i], &new_generation[i], num_particles);
+    #pragma omp parallel private(i) shared(box, max_parent,num_particles, new_generation,min_box)
+    {   
+        for (i=0; i<population_size; i++){
+            //printbox(new_generation[i]);
+            if (i == min_box) {
+                copybox(&box[i], &max_parent, num_particles);
+            } else {
+                copybox(&box[i], &new_generation[i], num_particles);
+            }
+            // printbox(box[i]);
         }
-        // printbox(box[i]);
     }
     if (max_parent.fitness > max_fitness) { //previous generation has the best
         max_fitness = max_parent.fitness;
@@ -241,6 +250,7 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
     population_best best_box;
     best_box.population_index = highest;
     best_box.fitness = max_fitness;
+
 
     // #pragma omp parallel private(i) shared(new_generation)
     // {
@@ -284,7 +294,7 @@ int main(int argc, char *argv[] ) {
 
     double start; 
     double end; 
-    double averageTimeTaken;
+    double averageTimeTaken = 0;
     start = omp_get_wtime(); 
 
     for (k=0; k<iter; k++) { //k is number of times whole simulation is run
@@ -309,7 +319,7 @@ int main(int argc, char *argv[] ) {
             gen += 1;
         }
         end = omp_get_wtime(); 
-        double timeTaken =end - start;
+        double timeTaken = end - start;
         printf("Work took %f seconds\n", timeTaken);
         averageTimeTaken+=timeTaken;
 
@@ -333,7 +343,7 @@ int main(int argc, char *argv[] ) {
 
     printf("Average generations: %f\n", (double)gen_count/(double)k);
 
-    averageTimeTaken=averageTimeTaken/ iter;
+    averageTimeTaken=averageTimeTaken/ (double)iter;
     printf("Average time taken: %f with %i particles" , averageTimeTaken, num_particles);
     return 0;
 }
