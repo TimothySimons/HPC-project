@@ -246,6 +246,7 @@ population_best breeding(box_pattern *box, int population_size, int x_max, int y
         max_fitness = max_parent.fitness;
         highest = min_box;
     }
+    
 
     population_best best_box;
     best_box.population_index = highest;
