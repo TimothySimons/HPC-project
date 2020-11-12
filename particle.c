@@ -4,10 +4,10 @@
  */
 
 #include <math.h>
-#include <omp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 #define DEFAULT_POP_SIZE 300 //bigger population is more costly
 #define DEFAULT_NUM_PARTICLES 30 //more PARTICLES is more costly
@@ -18,7 +18,7 @@ static const int Y_DEFAULT=20; //length of box
 static const double MUTATION_RATE=0.10; //how often random mutations occur
 static const double MAX_STAGNATION=100; // maximum number of generations
 static const double MAX_GEN=1000; // maximum number of generations
-static const double ITERATIONS=10; //number of times the whole process is run
+static const double ITERATIONS=5; //number of times the whole process is run
 static const double TOLERANCE=50; //not used... yet
 
 
@@ -128,7 +128,7 @@ void copybox(box_pattern *a, box_pattern *b,int num_particles){
 }
 
 
-/* Main GA function - does selection, breeding, crossover and mutation */
+/* main GA function - does selection, breeding, crossover and mutation */
 population_best breeding(box_pattern *box, int population_size, int x_max, int y_max, int num_particles){
     box_pattern max_parent; //keep track of highest from previous generation
     max_parent.person = malloc(num_particles * sizeof(position));
@@ -267,6 +267,9 @@ int main(int argc, char *argv[] ) {
         initPopulation(population,population_size,x_max,y_max,num_particles);
         printf("=========%d\n", k);
 
+        struct timeval start_time, end_time;
+        gettimeofday(&start_time, NULL);
+
         double max_fitness = 0;
         int stop = 0;
         int gen = 0, highest = 0;
@@ -283,6 +286,11 @@ int main(int argc, char *argv[] ) {
             gen += 1;
         }
 
+        gettimeofday(&end_time, NULL);
+        double total_time = (end_time.tv_sec - start_time.tv_sec) * 1e6; 
+        total_time = (total_time + (end_time.tv_usec -  start_time.tv_usec)) * 1e-6; 
+
+        printf("Finished GA in %.4f seconds\n", (double)total_time);
         printf("# generations= %d \n", gen);
         printf("Best solution:\n");
         printbox(population[highest], num_particles);
